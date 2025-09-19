@@ -1,0 +1,20 @@
+[project]
+name = "impostor-back"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.116.2",
+    "pydantic>=2.11.9",
+    "python-decouple>=3.8",
+    "uvicorn[standard]>=0.35.0",
+]
+
+[tool.fastapi]
+app = "src.app:app"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.1",
+]
