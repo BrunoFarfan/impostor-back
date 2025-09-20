@@ -3,11 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import random
 import string
-import decouple
 import json
-
-
-frontend_url: str = str(decouple.config("FRONTEND_URL"))
 
 app = FastAPI()
 
