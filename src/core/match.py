@@ -1,6 +1,7 @@
 import random
 import string
 from .state import matches
+from .websocket import WebSocketManager
 
 
 class MatchManager:
@@ -51,8 +52,6 @@ class MatchManager:
     @staticmethod
     async def join_match(match_code: str, player_name: str):
         """Add a player to a match"""
-        from .websocket import WebSocketManager
-
         if match_code not in matches:
             return None
 
