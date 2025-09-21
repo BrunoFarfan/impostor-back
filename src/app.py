@@ -34,6 +34,7 @@ def _get_match_info(match_code: str) -> dict | None:
 
     return {
         "players": players,
+        "can_start": matches[match_code]["can_start"],
         "phase": matches[match_code]["phase"],
     }
 
@@ -147,6 +148,21 @@ async def handle_toggle(match_code: str, player_id: str, toggle_value: bool):
         await broadcast_phase_change(match_code, "voting")
 
 
+async def handle_role_proposition(match_code: str, player_id: str, proposition: str):
+    """Handle a player's role proposition"""
+    if match_code not in matches:
+        return
+    
+    if player_id not in matches[match_code]["players"]:
+        return
+    
+    matches[match_code]["propositions"][player_id] = proposition
+    
+    if proposition and proposition.strip():
+        matches[match_code]["can_start"] = True
+        await broadcast_match_state(match_code)
+
+
 def _validate_vote(match_code: str, player_id: str) -> bool:
     """Validate if a player can vote"""
     if match_code not in matches:
@@ -243,7 +259,7 @@ async def _check_win_conditions_and_continue(match_code: str):
     total_alive = alive_impostors + alive_normal
 
     if alive_impostors >= (total_alive / 2):
-        game_over_message = {"type": "game_over", "winner": "impostors"}
+        game_over_message = {"type": "game_over", "winner": "impostor"}
         await broadcast_to_match(match_code, game_over_message)
         await broadcast_phase_change(match_code, "game_over")
     elif alive_impostors == 0:
@@ -315,10 +331,12 @@ async def create_match():
 
     matches[match_code] = {
         "players": {},
+        "can_start": False,
         "phase": "lobby",
         "round": 1,
         "votes": {},
         "secret_character": "Kanye West",
+        "propositions": {},
     }
 
     return {"match_code": match_code}
@@ -360,11 +378,31 @@ async def start_match(request: StartMatchRequest):
     match_info = _get_match_info(request.match_code)
     if not match_info or len(match_info["players"]) < 3:
         return {"error": "Need at least 3 connected players to start"}
+    
+    if not matches[request.match_code]["can_start"]:
+        return {"error": "Need at least one role proposition to start"}
 
     connected_players = match_info["players"]
 
     impostor_player = random.choice(connected_players)
     impostor_id = impostor_player["id"]
+
+    available_propositions = []
+    propositions = matches[request.match_code]["propositions"]
+    
+    for player in connected_players:
+        player_id = player["id"]
+        if player_id != impostor_id and player_id in propositions:
+            proposition = propositions[player_id].strip()
+            if proposition:
+                available_propositions.append(proposition)
+    
+    if available_propositions:
+        selected_role = random.choice(available_propositions)
+    else:
+        selected_role = "Kanye West"
+    
+    matches[request.match_code]["secret_character"] = selected_role
 
     for player in connected_players:
         if player["id"] == impostor_id:
@@ -378,7 +416,12 @@ async def start_match(request: StartMatchRequest):
 
     for player in connected_players:
         player_role = matches[request.match_code]["players"][player["id"]]["role"]
-        private_message = {"type": "role_assignment", "role": player_role}
+        if player_role == "impostor":
+            role_to_send = "impostor"
+        else:
+            role_to_send = selected_role
+        
+        private_message = {"type": "role_assignment", "role": role_to_send}
         await send_private_message(request.match_code, player["id"], private_message)
 
     return {"success": True, "phase": "role_assignment"}
@@ -422,6 +465,9 @@ async def websocket_endpoint(websocket: WebSocket, code: str, player_id: str):
                     target_id = message.get("target")
                     if target_id:
                         await handle_vote(code, player_id, target_id)
+                elif message_type == "role_proposition":
+                    proposition = message.get("proposition", "")
+                    await handle_role_proposition(code, player_id, proposition)
                 else:
                     await websocket.send_text(data)
 
